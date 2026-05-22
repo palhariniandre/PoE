@@ -9,8 +9,10 @@ idf_component_register(
         "main.cpp"
         "app_eth.cpp"
         "app_led.cpp"
+        "app_matter.cpp"
     INCLUDE_DIRS "."
     REQUIRES
+        esp_matter
         esp_eth
         esp_event
         esp_netif

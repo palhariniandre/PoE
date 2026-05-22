@@ -20,7 +20,8 @@
 static const char *TAG = "app_eth";
 
 static constexpr spi_host_device_t ENC28J60_SPI_HOST = SPI2_HOST;
-static constexpr int ENC28J60_SPI_CLOCK_MHZ = 8;
+// Matter DNS-SD/multicast increases TX bursts; 4 MHz is more forgiving for ENC28J60 on protoboard.
+static constexpr int ENC28J60_SPI_CLOCK_MHZ = 4;
 static constexpr int ENC28J60_SPI_CLOCK_HZ = ENC28J60_SPI_CLOCK_MHZ * 1000 * 1000;
 
 static constexpr gpio_num_t ENC28J60_PIN_MOSI = GPIO_NUM_23;

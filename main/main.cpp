@@ -1,5 +1,6 @@
 #include "app_eth.h"
 #include "app_led.h"
+#include "app_matter.h"
 
 #include "esp_err.h"
 #include "esp_log.h"
@@ -23,8 +24,10 @@ extern "C" void app_main(void)
     ESP_ERROR_CHECK(app_eth_init());
     ESP_ERROR_CHECK(app_wait_for_eth_connected(pdMS_TO_TICKS(30000)));
 
-    ESP_LOGI(TAG, "Etapa 1 concluida: Ethernet ENC28J60 validada. Matter ainda nao iniciado.");
-    ESP_LOGI(TAG, "Proxima etapa conceitual: app_matter_light_init() somente depois da rede pronta.");
+    ESP_LOGI(TAG, "Etapa 1 concluida: Ethernet ENC28J60 validada.");
+    ESP_ERROR_CHECK(app_matter_light_init());
+    ESP_ERROR_CHECK(app_matter_start());
+    ESP_LOGI(TAG, "Etapa 2 iniciada: Matter On/Off Light aguardando comissionamento via Ethernet.");
 
     while (true) {
         vTaskDelay(pdMS_TO_TICKS(10000));

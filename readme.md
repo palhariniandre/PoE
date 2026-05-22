@@ -1,17 +1,14 @@
-# ESP32 + ENC28J60 + LED: validação Ethernet antes de Matter
+# ESP32 + ENC28J60 + Matter On/Off Light via Ethernet
 
-Este projeto implementa a **Etapa 1** do roteiro: validar Ethernet com ESP32 + ENC28J60 via SPI antes de iniciar ESP-Matter. O firmware atual inicializa:
+Este projeto valida Matter over Ethernet em etapas usando:
 
-- NVS
+- ESP32
+- ENC28J60 via SPI
 - LED de teste no `GPIO26`
-- SPI para o ENC28J60
-- driver `espressif/enc28j60`
-- `esp_netif`
-- Ethernet
-- eventos de link, IPv4 e IPv6
-- logs no monitor serial
+- ESP-Matter como dispositivo `On/Off Light`
+- Sem Wi-Fi como transporte operacional
 
-Matter ainda **não** é iniciado neste firmware. A regra do projeto é iniciar Matter somente depois de confirmar link Ethernet, interface criada, IPv4 para debug/ping e IPv6 link-local para Matter.
+A Etapa 1 já foi validada em hardware: link Ethernet, IPv4 por DHCP e IPv6. A Etapa 2 agora está implementada no firmware: depois que a Ethernet fica pronta, o app cria um endpoint Matter `On/Off Light` e inicia `esp_matter::start()`.
 
 ## Arquitetura
 
@@ -49,68 +46,102 @@ GPIO26 -> resistor 220R/330R -> LED -> GND
 | resistor | anodo do LED |
 | catodo do LED | GND |
 
-Evite `GPIO0`, `GPIO2`, `GPIO12` e `GPIO15` nesta fase, porque podem interferir no boot.
+Evite `GPIO0`, `GPIO2`, `GPIO12` e `GPIO15`.
 
-## Recomendações elétricas para o ENC28J60
+## Build
 
-- Use fios SPI curtos.
-- Mantenha GND comum entre ESP32 e ENC28J60.
-- Coloque um capacitor de `100 nF` perto do módulo.
-- Coloque `10 uF` ou `47 uF` na alimentação do módulo.
-- Comece com SPI em `8 MHz`.
-- Evite protoboard muito bagunçada.
-- Garanta fonte forte o suficiente; alguns módulos ENC28J60 têm consumo alto.
-
-## Build e flash
-
-O ESP-IDF informado está em:
+O ESP-IDF usado neste ambiente está em:
 
 ```bash
-/home/dede/esp/esp-idf
+/home/dede/esp/esp-idf-v5.2.7
 ```
 
-Prepare o ambiente e compile:
+Compile:
 
 ```bash
 cd /home/dede/esp/PoE
-source /home/dede/esp/esp-idf/export.sh
-idf.py set-target esp32
+source /home/dede/esp/esp-idf-v5.2.7/export.sh
 idf.py build
 ```
 
-Grave e abra o monitor:
+Se os `managed_components` forem apagados ou baixados novamente, o primeiro `idf.py build` pode falhar depois de baixar o ESP-Matter, porque o componente volta ao driver Ethernet RMII/IP101 padrão. Nesse caso, reaplique a adaptação e compile de novo:
 
 ```bash
-idf.py flash monitor
+tools/patch_esp_matter_spi_eth.sh
+idf.py build
 ```
 
-Se quiser apagar NVS/flash durante testes:
+Essa adaptação evita que o ESP-Matter v1.3 tente inicializar Ethernet RMII/IP101 interna. Neste projeto, a interface Ethernet correta é a ENC28J60 já inicializada por `app_eth.cpp`.
+
+## Flash
 
 ```bash
-idf.py erase-flash
-idf.py flash monitor
+idf.py -p /dev/ttyUSB0 flash monitor
 ```
+
+Se o dispositivo já foi comissionado e você quer parear de novo:
+
+```bash
+idf.py -p /dev/ttyUSB0 erase-flash
+idf.py -p /dev/ttyUSB0 flash monitor
+```
+
+## Fluxo do firmware
+
+```text
+app_main()
+ ├── nvs_flash_init()
+ ├── app_led_init()
+ ├── app_eth_init()
+ ├── app_wait_for_eth_connected()
+ ├── app_matter_light_init()
+ └── esp_matter::start()
+```
+
+Matter só inicia depois que:
+
+- link Ethernet está ativo
+- `esp_netif` está criada
+- IPv4 foi recebido para debug/ping
+- IPv6 link-local está disponível
+
+## Endpoint Matter
+
+- Endpoint `0`: root Matter
+- Endpoint `1`: `On/Off Light`
+
+Mapeamento:
+
+```text
+Matter OnOff false -> GPIO26 baixo -> LED apagado
+Matter OnOff true  -> GPIO26 alto  -> LED aceso
+```
+
+O callback está em `main/app_matter.cpp` e aplica `OnOff` no `app_led_set()`.
 
 ## Logs esperados
 
-Com cabo Ethernet conectado ao switch/roteador, o monitor deve mostrar algo nesta linha:
+Com cabo Ethernet conectado:
 
 ```text
 I app_led: LED de teste configurado no GPIO26
-I app_eth: Inicializando SPI2: SCLK=18 MISO=19 MOSI=23 CS=5 INT=27, clock=8 MHz
-I app_eth: Ethernet Started
 I app_eth: Ethernet Link Up
-I app_eth: Ethernet HW Addr xx:xx:xx:xx:xx:xx
-I app_eth: Ethernet Got IPv4
 I app_eth: ETHIP: 192.168.x.x
 I app_eth: Ethernet Got IPv6: fe80::..., type: link-local
 I app_eth: Ethernet pronta para a proxima etapa: Matter over Ethernet
-I main: Etapa 1 concluida: Ethernet ENC28J60 validada. Matter ainda nao iniciado.
+I main: Etapa 1 concluida: Ethernet ENC28J60 validada.
+I app_matter: Matter On/Off Light criado no endpoint 0x1
+I app_matter: Matter iniciado sobre a interface Ethernet ja validada
+I main: Etapa 2 iniciada: Matter On/Off Light aguardando comissionamento via Ethernet.
 ```
 
-O firmware aborta com timeout se não receber link, IPv4 e IPv6 em até 30 segundos.
+Também deve aparecer no log do Matter:
 
-## Testes no notebook
+```text
+Using externally initialized SPI Ethernet interface
+```
+
+## Testes de rede
 
 Use o IPv4 mostrado no monitor:
 
@@ -119,64 +150,60 @@ ping <ipv4-do-esp32>
 ip neigh
 ```
 
-Para IPv6 link-local, use a interface correta do notebook:
+Para IPv6 link-local:
 
 ```bash
 ip addr
 ping6 fe80::<ipv6-do-esp32>%<iface>
 ```
 
-Em WSL2, mDNS/multicast pode não sair corretamente para a LAN dependendo do modo de rede. Para Matter, prefira Linux nativo ou confirme que multicast IPv6/mDNS funciona no ambiente.
+Em WSL2, mDNS/multicast pode falhar dependendo do modo de rede. Para Matter, Linux nativo costuma ser mais previsível.
 
-## Estrutura implementada
-
-```text
-app_main()
- ├── nvs_flash_init()
- ├── app_led_init()
- ├── app_eth_init()
- ├── app_wait_for_eth_connected()
- ├── TODO app_matter_light_init()
- └── TODO esp_matter::start()
-```
-
-Arquivos principais:
-
-- `main/main.cpp`: sequência de boot e espera da Ethernet.
-- `main/app_eth.cpp`: SPI, ENC28J60, `esp_netif`, eventos, IPv4 e IPv6.
-- `main/app_led.cpp`: controle básico do LED no `GPIO26`.
-- `main/idf_component.yml`: dependência `espressif/enc28j60`.
-- `sdkconfig.defaults`: IPv4/IPv6 e Ethernet SPI.
-
-## Próxima etapa: Matter over Ethernet
-
-Depois que ping e IPv6 estiverem estáveis:
-
-1. Instalar/configurar ESP-Matter em `/home/dede/esp/esp-matter`.
-2. Compilar primeiro o exemplo oficial `examples/light`.
-3. Integrar `app_eth_init()` e `app_wait_for_eth_connected()` antes de `esp_matter::start()`.
-4. Desabilitar Wi-Fi como transporte operacional.
-5. Criar `On/Off Light` no endpoint `0x1`.
-6. Mapear o cluster `OnOff` para o LED:
-
-```text
-Matter OnOff false -> GPIO26 baixo -> LED apagado
-Matter OnOff true  -> GPIO26 alto  -> LED aceso
-```
-
-Comandos de teste futuros:
+## Descoberta Matter com Avahi
 
 ```bash
 sudo apt install avahi-utils
 avahi-browse -rt _matterc._udp
+```
 
+Em modo de comissionamento deve aparecer uma instância `_matterc._udp` com endereço, porta e TXT records de comissionamento. Depois de pareado, o anúncio commissionable pode sumir.
+
+## chip-tool
+
+Pareamento on-network:
+
+```bash
 chip-tool pairing onnetwork 0x7283 20202021
+```
+
+Controle do LED:
+
+```bash
 chip-tool onoff on 0x7283 0x1
 chip-tool onoff off 0x7283 0x1
 chip-tool onoff toggle 0x7283 0x1
 ```
 
-Para dimmer futuro com LEDC:
+Se precisar remover do controller:
+
+```bash
+chip-tool pairing unpair 0x7283
+```
+
+## Troubleshooting rápido
+
+- Sem IP: confira DHCP, cabo, switch, evento `IP_EVENT_ETH_GOT_IP` e MAC.
+- Sem link: confira VCC, GND, cabo, CS, INT e alimentação do ENC28J60.
+- `tx_ready_sem expired`: normalmente é `INT` solto/errado, ISR GPIO, fonte fraca, SPI instável ou fios longos.
+- `avahi-browse` não mostra `_matterc._udp`: dispositivo já comissionado, Matter não iniciou, firewall, WSL2 ou multicast bloqueado.
+- Ping funciona mas Matter não comissiona: investigue IPv6, mDNS, multicast, firewall e se o notebook está na mesma LAN.
+- LED não responde: confira endpoint `0x1`, cluster `OnOff`, callback `PRE_UPDATE`, `GPIO26` e polaridade.
+- Funcionou uma vez e não pareia: faça `chip-tool pairing unpair 0x7283` e/ou `idf.py erase-flash`.
+- Instabilidade ENC28J60: use fios curtos, GND comum, capacitor `100 nF`, capacitor `10 uF` ou `47 uF`, SPI em `4 MHz` para protoboard e fonte forte.
+
+## Próximo passo: dimmer
+
+Depois que `OnOff` estiver estável, evoluir para `Dimmable Light` com LEDC:
 
 ```text
 Matter LevelControl 0   -> PWM 0%
@@ -184,35 +211,15 @@ Matter LevelControl 127 -> PWM aproximadamente 50%
 Matter LevelControl 254 -> PWM 100%
 ```
 
+Comandos:
+
 ```bash
 chip-tool levelcontrol move-to-level 10 0 0 0 0x7283 0x1
 chip-tool levelcontrol move-to-level 100 0 0 0 0x7283 0x1
 chip-tool levelcontrol move-to-level 254 0 0 0 0x7283 0x1
 ```
 
-## Troubleshooting rápido
-
-- ESP32 não recebe IP: confira DHCP, cabo, switch, logs `ETHIP`, MAC e evento `IP_EVENT_ETH_GOT_IP`.
-- ENC28J60 não dá link: confira VCC, GND, cabo, módulo, CS, INT e alimentação.
-- `gpio_isr_handler_add`: o firmware instala `gpio_install_isr_service()` antes do driver ENC28J60; se esse erro aparecer, recompile e grave a versão atual.
-- `tx_ready_sem expired`: normalmente indica interrupção `INT` não funcionando, fio `GPIO27` errado/solto, ISR GPIO não instalada, alimentação fraca ou SPI/fiação instável.
-- IPv4 funciona mas IPv6 não aparece: confirme `CONFIG_LWIP_IPV6=y`, link ativo e evento `IP_EVENT_GOT_IP6`.
-- Ping funciona mas Matter não comissiona: investigue IPv6, mDNS, firewall, WSL2 e multicast bloqueado.
-- `avahi-browse` não mostra `_matterc._udp`: dispositivo pode já estar pareado, Matter pode não ter iniciado ou multicast/mDNS pode estar bloqueado.
-- LED não responde futuramente ao Matter: confira endpoint `0x1`, callback `PRE_UPDATE`, cluster `OnOff` e polaridade do `GPIO26`.
-- Funcionou uma vez e não pareia novamente: faça factory reset ou `idf.py erase-flash`; no controller, remova o nó com `chip-tool pairing unpair 0x7283`.
-- Instabilidade no ENC28J60: reduza SPI para `8 MHz`, encurte fios, melhore desacoplamento e fonte.
-
-## Produto final
-
-O ENC28J60 é adequado para protótipo, mas para produto final com PoE e driver de LED considere:
-
-- W5500
-- Ethernet RMII com PHY dedicado
-- placa ESP32 com Ethernet nativa
-- hardware PoE com controlador PD adequado
-
-Depois do checklist Matter, a substituição do LED por driver real deve seguir esta ideia:
+Depois trocar o LED por driver real:
 
 ```text
 GPIO26 PWM -> entrada DIM/PWM do driver
@@ -220,15 +227,13 @@ GPIO25     -> ENABLE do driver
 GND ESP32  -> GND de controle do driver, se o driver não for isolado
 ```
 
-Este é o próximo passo, não a primeira etapa.
-
 ## Checklist alvo
 
 ```text
-[ ] ESP32 inicializa sem erro
-[ ] ENC28J60 dá link Ethernet
-[ ] ESP32 recebe IP
-[ ] notebook consegue pingar o ESP32
+[x] ESP32 inicializa sem erro
+[x] ENC28J60 dá link Ethernet
+[x] ESP32 recebe IP
+[x] notebook consegue pingar o ESP32
 [ ] dispositivo anuncia Matter via mDNS
 [ ] chip-tool faz pairing onnetwork
 [ ] chip-tool onoff on acende o LED

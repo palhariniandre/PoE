@@ -1,13 +1,46 @@
 CONFIG_LOG_DEFAULT_LEVEL_INFO=y
 
-# This first firmware validates only wired Ethernet over ENC28J60.
+# Wired Ethernet over ENC28J60.
 CONFIG_ETH_USE_ESP32_EMAC=n
 CONFIG_ETH_USE_SPI_ETHERNET=y
 
-# Matter requires IPv6. Keep it enabled from the first Ethernet smoke test.
+# Matter requires IPv6.
 CONFIG_LWIP_IPV4=y
 CONFIG_LWIP_IPV6=y
 CONFIG_LWIP_IPV6_AUTOCONFIG=y
+CONFIG_LWIP_IPV6_NUM_ADDRESSES=6
+CONFIG_LWIP_HOOK_IP6_ROUTE_DEFAULT=y
+CONFIG_LWIP_HOOK_ND6_GET_GW_DEFAULT=y
 
 # Keep serial monitor output readable while bringing up the network.
 CONFIG_ESP_SYSTEM_PANIC_PRINT_REBOOT=y
+
+# Matter firmware is larger than the default 1 MB factory partition.
+CONFIG_ESPTOOLPY_FLASHSIZE_4MB=y
+CONFIG_PARTITION_TABLE_CUSTOM=y
+CONFIG_PARTITION_TABLE_FILENAME="partitions.csv"
+CONFIG_PARTITION_TABLE_OFFSET=0xC000
+
+# Commissioning/dev console. Operational transport remains Ethernet only.
+CONFIG_ENABLE_CHIP_SHELL=y
+CONFIG_ENABLE_WIFI_STATION=n
+CONFIG_ENABLE_WIFI_AP=n
+CONFIG_ESP_WIFI_SOFTAP_SUPPORT=n
+CONFIG_ENABLE_WIFI_TELEMETRY=n
+CONFIG_DIAG_ENABLE_WIFI_METRICS=n
+
+# In ESP-Matter v1.3 this option enables the ESP32 Ethernet platform path.
+# The ENC28J60 driver is still initialized by app_eth.cpp before Matter starts.
+CONFIG_ENABLE_ETHERNET_TELEMETRY=y
+CONFIG_ETH_PHY_RST_GPIO=-1
+
+# BLE stays enabled for compatibility with the default Matter commissioning stack,
+# but the intended commissioning path for this project is on-network DNS-SD over Ethernet.
+CONFIG_BT_ENABLED=y
+CONFIG_BT_NIMBLE_ENABLED=y
+CONFIG_BT_NIMBLE_ENABLE_CONN_REATTEMPT=n
+
+# ESP-Matter recommended options from the managed component light example.
+CONFIG_ESP_MATTER_NVS_USE_COMPACT_ATTR_STORAGE=y
+CONFIG_MBEDTLS_HKDF_C=y
+CONFIG_ESP_SECURE_CERT_DS_PERIPHERAL=n
