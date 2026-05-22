@@ -1,0 +1,20 @@
+dependencies:
+  espressif/enc28j60:
+    component_hash: 664f66c7ed880c157be6410af0ee3b0e8703efad76061bab30daec3d6ef5de22
+    dependencies:
+    - name: idf
+      require: private
+      version: '>=4.4'
+    source:
+      registry_url: https://components.espressif.com/
+      type: service
+    version: 1.1.0
+  idf:
+    source:
+      type: idf
+    version: 5.2.7
+direct_dependencies:
+- espressif/enc28j60
+manifest_hash: 4510eff466b488ca7312994222d68938efbda7d772e305b27dc54cddf0f50486
+target: esp32
+version: 2.0.0

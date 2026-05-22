@@ -1,0 +1,13 @@
+CONFIG_LOG_DEFAULT_LEVEL_INFO=y
+
+# This first firmware validates only wired Ethernet over ENC28J60.
+CONFIG_ETH_USE_ESP32_EMAC=n
+CONFIG_ETH_USE_SPI_ETHERNET=y
+
+# Matter requires IPv6. Keep it enabled from the first Ethernet smoke test.
+CONFIG_LWIP_IPV4=y
+CONFIG_LWIP_IPV6=y
+CONFIG_LWIP_IPV6_AUTOCONFIG=y
+
+# Keep serial monitor output readable while bringing up the network.
+CONFIG_ESP_SYSTEM_PANIC_PRINT_REBOOT=y
