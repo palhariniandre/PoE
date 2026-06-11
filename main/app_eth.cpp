@@ -155,7 +155,10 @@ static void got_ip6_event_handler(void *arg, esp_event_base_t event_base, int32_
 
 esp_err_t app_eth_init(void)
 {
-    ESP_RETURN_ON_FALSE(s_eth_event_group == nullptr, ESP_ERR_INVALID_STATE, TAG, "Ethernet already initialized");
+    if (s_eth_event_group) {
+        ESP_LOGI(TAG, "Ethernet already initialized");
+        return ESP_OK;
+    }
 
     s_eth_event_group = xEventGroupCreate();
     ESP_RETURN_ON_FALSE(s_eth_event_group, ESP_ERR_NO_MEM, TAG, "failed to create Ethernet event group");
@@ -236,6 +239,35 @@ esp_err_t app_eth_init(void)
 
     ESP_RETURN_ON_ERROR(esp_eth_start(s_eth_handle), TAG, "esp_eth_start failed");
     return ESP_OK;
+}
+
+bool app_eth_is_initialized(void)
+{
+    return s_eth_event_group != nullptr;
+}
+
+esp_netif_t *app_eth_get_netif(void)
+{
+    return s_eth_netif;
+}
+
+esp_eth_handle_t app_eth_get_handle(void)
+{
+    return s_eth_handle;
+}
+
+esp_err_t app_eth_ensure_ipv6_linklocal(void)
+{
+#if CONFIG_LWIP_IPV6
+    ESP_RETURN_ON_FALSE(s_eth_netif, ESP_ERR_INVALID_STATE, TAG, "Ethernet netif not initialized");
+    esp_err_t err = esp_netif_create_ip6_linklocal(s_eth_netif);
+    if (err == ESP_ERR_INVALID_STATE) {
+        return ESP_OK;
+    }
+    return err;
+#else
+    return ESP_OK;
+#endif
 }
 
 esp_err_t app_wait_for_eth_connected(TickType_t timeout_ticks)

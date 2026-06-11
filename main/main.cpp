@@ -22,12 +22,12 @@ extern "C" void app_main(void)
 
     ESP_ERROR_CHECK(app_led_init());
     ESP_ERROR_CHECK(app_eth_init());
-    ESP_ERROR_CHECK(app_wait_for_eth_connected(pdMS_TO_TICKS(30000)));
-
-    ESP_LOGI(TAG, "Etapa 1 concluida: Ethernet ENC28J60 validada.");
     ESP_ERROR_CHECK(app_matter_light_init());
     ESP_ERROR_CHECK(app_matter_start());
-    ESP_LOGI(TAG, "Etapa 2 iniciada: Matter On/Off Light aguardando comissionamento via Ethernet.");
+
+    ESP_LOGI(TAG, "Matter iniciado; aguardando Ethernet ENC28J60 para comissionamento on-network.");
+    ESP_ERROR_CHECK(app_wait_for_eth_connected(pdMS_TO_TICKS(30000)));
+    ESP_LOGI(TAG, "Ethernet pronta; Matter aguardando comissionamento via DNS-SD.");
 
     while (true) {
         vTaskDelay(pdMS_TO_TICKS(10000));

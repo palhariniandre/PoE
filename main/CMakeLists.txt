@@ -10,6 +10,7 @@ idf_component_register(
         "app_eth.cpp"
         "app_led.cpp"
         "app_matter.cpp"
+        "app_matter_eth.cpp"
     INCLUDE_DIRS "."
     REQUIRES
         esp_matter
