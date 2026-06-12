@@ -1,6 +1,6 @@
 #include "app_matter.h"
 
-#include "app_led.h"
+#include "app_light_driver.h"
 
 #include <esp_err.h>
 #include <esp_log.h>
@@ -15,9 +15,6 @@ static const char *TAG = "app_matter";
 static uint16_t s_light_endpoint_id = 0;
 static bool s_matter_initialized = false;
 static uint8_t s_current_level = 64;
-static uint16_t s_current_x = 0x616b;
-static uint16_t s_current_y = 0x607d;
-static uint16_t s_color_temperature_mireds = 250;
 
 using namespace chip::app::Clusters;
 using namespace esp_matter;
@@ -25,6 +22,27 @@ using namespace esp_matter::attribute;
 using namespace esp_matter::endpoint;
 
 static constexpr auto k_commissioning_window_timeout_seconds = 300;
+
+static void add_root_network_info_clusters(node_t *node)
+{
+    endpoint_t *root_endpoint = endpoint::get(node, 0);
+    if (!root_endpoint) {
+        ESP_LOGW(TAG, "Endpoint 0 Root Node nao encontrado para clusters de rede");
+        return;
+    }
+
+    if (!esp_matter::cluster::get(root_endpoint, EthernetNetworkDiagnostics::Id)) {
+        esp_matter::cluster::diagnostics_network_ethernet::config_t ethernet_diag_config;
+        cluster_t *ethernet_diag_cluster = esp_matter::cluster::diagnostics_network_ethernet::create(
+            root_endpoint, &ethernet_diag_config, CLUSTER_FLAG_SERVER);
+        if (!ethernet_diag_cluster) {
+            ESP_LOGW(TAG, "Nao foi possivel adicionar Ethernet Network Diagnostics no endpoint 0");
+            return;
+        }
+    }
+
+    ESP_LOGI(TAG, "Endpoint 0 Root Node pronto com Network Commissioning e Ethernet Diagnostics");
+}
 
 static void set_deferred_attribute_persistence(endpoint_t *ep, uint32_t cluster_id, uint32_t attribute_id)
 {
@@ -124,27 +142,14 @@ static esp_err_t app_attribute_update_cb(attribute::callback_type_t type, uint16
     }
 
     if (cluster_id == OnOff::Id && attribute_id == OnOff::Attributes::OnOff::Id) {
-        ESP_LOGI(TAG, "Matter OnOff=%d -> GPIO26=%d", val->val.b, val->val.b ? 1 : 0);
-        return app_led_set(val->val.b);
+        ESP_LOGI(TAG, "Matter OnOff=%d -> PWM", val->val.b);
+        return app_light_driver_set_on(val->val.b);
     }
 
     if (cluster_id == LevelControl::Id && attribute_id == LevelControl::Attributes::CurrentLevel::Id) {
         s_current_level = val->val.u8;
-        ESP_LOGI(TAG, "Matter CurrentLevel=%u", s_current_level);
-        return ESP_OK;
-    }
-
-    if (cluster_id == ColorControl::Id) {
-        if (attribute_id == ColorControl::Attributes::ColorTemperatureMireds::Id) {
-            s_color_temperature_mireds = val->val.u16;
-            ESP_LOGI(TAG, "Matter ColorTemperatureMireds=%u", s_color_temperature_mireds);
-        } else if (attribute_id == ColorControl::Attributes::CurrentX::Id) {
-            s_current_x = val->val.u16;
-            ESP_LOGI(TAG, "Matter CurrentX=%u CurrentY=%u", s_current_x, s_current_y);
-        } else if (attribute_id == ColorControl::Attributes::CurrentY::Id) {
-            s_current_y = val->val.u16;
-            ESP_LOGI(TAG, "Matter CurrentX=%u CurrentY=%u", s_current_x, s_current_y);
-        }
+        ESP_LOGI(TAG, "Matter CurrentLevel=%u -> PWM duty", s_current_level);
+        return app_light_driver_set_level(s_current_level);
     }
 
     return ESP_OK;
@@ -162,24 +167,20 @@ esp_err_t app_matter_light_init(void)
         ESP_LOGE(TAG, "Failed to create Matter root node");
         return ESP_FAIL;
     }
+    add_root_network_info_clusters(node);
 
-    extended_color_light::config_t light_config;
-    light_config.on_off.on_off = app_led_get();
+    s_current_level = app_light_driver_get_level();
+
+    dimmable_light::config_t light_config;
+    light_config.on_off.on_off = app_light_driver_is_on();
     light_config.on_off.lighting.start_up_on_off = nullptr;
     light_config.level_control.current_level = s_current_level;
     light_config.level_control.on_level = s_current_level;
     light_config.level_control.lighting.start_up_current_level = s_current_level;
-    light_config.color_control.color_mode = static_cast<uint8_t>(ColorControl::ColorMode::kColorTemperature);
-    light_config.color_control.enhanced_color_mode =
-        static_cast<uint8_t>(ColorControl::ColorMode::kColorTemperature);
-    light_config.color_control.color_temperature.color_temperature_mireds = s_color_temperature_mireds;
-    light_config.color_control.color_temperature.startup_color_temperature_mireds = nullptr;
-    light_config.color_control.xy.current_x = s_current_x;
-    light_config.color_control.xy.current_y = s_current_y;
 
-    endpoint_t *endpoint = extended_color_light::create(node, &light_config, ENDPOINT_FLAG_NONE, nullptr);
+    endpoint_t *endpoint = dimmable_light::create(node, &light_config, ENDPOINT_FLAG_NONE, nullptr);
     if (!endpoint) {
-        ESP_LOGE(TAG, "Failed to create Matter Extended Color Light endpoint");
+        ESP_LOGE(TAG, "Failed to create Matter Dimmable Light endpoint");
         return ESP_FAIL;
     }
 
@@ -189,12 +190,8 @@ esp_err_t app_matter_light_init(void)
     }
 
     set_deferred_attribute_persistence(endpoint, LevelControl::Id, LevelControl::Attributes::CurrentLevel::Id);
-    set_deferred_attribute_persistence(endpoint, ColorControl::Id, ColorControl::Attributes::CurrentX::Id);
-    set_deferred_attribute_persistence(endpoint, ColorControl::Id, ColorControl::Attributes::CurrentY::Id);
-    set_deferred_attribute_persistence(endpoint, ColorControl::Id,
-                                       ColorControl::Attributes::ColorTemperatureMireds::Id);
 
-    ESP_LOGI(TAG, "Matter Extended Color Light criado no endpoint 0x%x", s_light_endpoint_id);
+    ESP_LOGI(TAG, "Matter Dimmable Light criado no endpoint 0x%x", s_light_endpoint_id);
     s_matter_initialized = true;
     return ESP_OK;
 }

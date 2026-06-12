@@ -1,14 +1,14 @@
 set(driver_requires driver)
 
 if("${IDF_VERSION_MAJOR}.${IDF_VERSION_MINOR}" VERSION_GREATER_EQUAL "5.3")
-    set(driver_requires esp_driver_gpio esp_driver_spi)
+    set(driver_requires esp_driver_gpio esp_driver_ledc esp_driver_spi)
 endif()
 
 idf_component_register(
     SRCS
         "main.cpp"
         "app_eth.cpp"
-        "app_led.cpp"
+        "app_light_driver.cpp"
         "app_matter.cpp"
         "app_matter_eth.cpp"
     INCLUDE_DIRS "."

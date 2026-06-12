@@ -220,6 +220,11 @@ esp_err_t app_eth_init(void)
     ESP_RETURN_ON_ERROR(esp_eth_ioctl(s_eth_handle, ETH_CMD_S_MAC_ADDR, mac_addr),
                         TAG, "failed to set Ethernet MAC address");
 
+    bool promiscuous = true;
+    ESP_RETURN_ON_ERROR(esp_eth_ioctl(s_eth_handle, ETH_CMD_S_PROMISCUOUS, &promiscuous),
+                        TAG, "failed to enable ENC28J60 promiscuous mode");
+    ESP_LOGI(TAG, "ENC28J60 promiscuous mode enabled for IPv6/NDP/mDNS");
+
     esp_netif_config_t netif_config = ESP_NETIF_DEFAULT_ETH();
     s_eth_netif = esp_netif_new(&netif_config);
     ESP_RETURN_ON_FALSE(s_eth_netif, ESP_ERR_NO_MEM, TAG, "esp_netif_new failed");
