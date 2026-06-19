@@ -1,3 +1,4 @@
+#include "app_adc.h"
 #include "app_eth.h"
 #include "app_light_driver.h"
 #include "app_matter.h"
@@ -20,6 +21,7 @@ extern "C" void app_main(void)
         ESP_ERROR_CHECK(ret);
     }
 
+    ESP_ERROR_CHECK(app_adc_init());
     ESP_ERROR_CHECK(app_light_driver_init());
     ESP_ERROR_CHECK(app_eth_init());
     ESP_ERROR_CHECK(app_matter_light_init());

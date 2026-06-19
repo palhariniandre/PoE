@@ -1,6 +1,7 @@
 #include "app_matter.h"
 
 #include "app_light_driver.h"
+#include "app_voltage_measurement.h"
 
 #include <esp_err.h>
 #include <esp_log.h>
@@ -191,6 +192,12 @@ esp_err_t app_matter_light_init(void)
 
     set_deferred_attribute_persistence(endpoint, LevelControl::Id, LevelControl::Attributes::CurrentLevel::Id);
 
+    esp_err_t err = app_voltage_measurement_create_endpoints(node);
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to create Matter voltage endpoints: %s", esp_err_to_name(err));
+        return err;
+    }
+
     ESP_LOGI(TAG, "Matter Dimmable Light criado no endpoint 0x%x", s_light_endpoint_id);
     s_matter_initialized = true;
     return ESP_OK;
@@ -205,6 +212,12 @@ esp_err_t app_matter_start(void)
     esp_err_t err = esp_matter::start(app_event_cb);
     if (err != ESP_OK) {
         ESP_LOGE(TAG, "Failed to start Matter: %s", esp_err_to_name(err));
+        return err;
+    }
+
+    err = app_voltage_measurement_start();
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to start Matter voltage measurements: %s", esp_err_to_name(err));
         return err;
     }
 
